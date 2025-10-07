@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple
 from src.baseline import CatBoostFattyAcidsPredictor
 
 def preproc_data(data: pd.DataFrame) -> pd.DataFrame:
-        columns = pd.read_pickle('data/columns')
+        columns = pd.read_pickle('./src/columns')
         columns = columns.to_list()
         columns = ['Рецепты'] + columns
 
