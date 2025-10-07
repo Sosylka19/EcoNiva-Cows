@@ -15,6 +15,7 @@
 мы сразу подгрузили в репу kis.xlsx(и всякие файлы, которые собирались во время EDA), потому что он создавался из кусочков
 
 
+для запуска установите python 3.13.+
 ```
 git clone https://github.com/Sosylka19/EcoNiva-Cows.git && cd EcoNiva-Cows
 ```
