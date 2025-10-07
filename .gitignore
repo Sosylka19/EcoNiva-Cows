@@ -8,6 +8,8 @@ __pycache__/
 *catboost_info
 *data
 
+*.DS_Store
+
 # Distribution / packaging
 .Python
 build/
