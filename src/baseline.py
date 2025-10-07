@@ -1,15 +1,12 @@
 import pandas as pd
 import numpy as np
 from catboost import CatBoostRegressor
-from sklearn.model_selection import train_test_split, KFold, cross_val_score
+from sklearn.model_selection import train_test_split, KFold
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
-import seaborn as sns
 import warnings
 import time
-from datetime import datetime
-import json
 import joblib
 
 warnings.filterwarnings('ignore')
@@ -348,7 +345,7 @@ def main():
     predictor = CatBoostFattyAcidsPredictor(random_state=42)
     
     try:
-        X, y = predictor.load_and_preprocess_data('./data/kis.xlsx')
+        X, y = predictor.load_and_preprocess_data('kis.xlsx')
         
         predictor.train_with_cross_validation(n_splits=5)
 

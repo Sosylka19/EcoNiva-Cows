@@ -1,14 +1,11 @@
-import io
-import json
-from typing import Optional, Tuple, List
-import pathlib
+from typing import Tuple
 import os
 import shutil
 
 import gradio as gr
 import pandas as pd
 
-from src.preprocessor import extract_table_from_pdf
+from src.preprocessor import extract_table_from_pdf, extract_table_from_excel
 from src.model import predictor, get_main_features
 
 FA_COLUMNS = [
@@ -17,27 +14,11 @@ FA_COLUMNS = [
 ]
 APP_TITLE = "Анализ жирных кислот"
 APP_DESC = (
-    "1) Загрузите PDF или Excel с таблицей рациона.\n"
+    "1) Загрузите PDF(не грузите фото) или Excel с таблицей рациона.\n"
     "2) Отредактируйте извлечённую таблицу (при необходимости).\n"
     "3) Нажмите «Начать анализ», чтобы получить предсказания по жирным кислотам.\n"
     "Можно править таблицу и запускать анализ многократно."
 )
-
-
-
-def extract_table_from_excel(path: str) -> Optional[pd.DataFrame]:
-    """
-    Читает первую таблицу из Excel (первый лист) по пути к файлу.
-    """
-    try:
-        df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
-    except Exception:
-        # fallback без явного указания engine
-        df = pd.read_excel(path, sheet_name=0)
-    if not df.empty:
-        df.columns = [str(c).strip() for c in df.columns]
-        return df
-    return None
 
 
 def preprocess_uploaded_file(file: gr.File) -> Tuple[pd.DataFrame, str]:

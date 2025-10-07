@@ -1,7 +1,6 @@
 import pathlib
 import pandas as pd
 import camelot
-import os
 import re
 import sys
 
@@ -95,6 +94,16 @@ def extract_table_from_pdf(path: pathlib.Path) -> pd.DataFrame:
 
     return data_preproc
 
-# здесь напишу анализ предикта по сравнению с диапазоном(типо из feature 
-# importance беру самую большой вклад 
-# и говорю что уменьши/увеличь его)
+def extract_table_from_excel(path: str) -> pd.DataFrame | None:
+    """
+    Читает первую таблицу из Excel (первый лист) по пути к файлу.
+    """
+    try:
+        df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
+    except Exception:
+        # fallback без явного указания engine
+        df = pd.read_excel(path, sheet_name=0)
+    if not df.empty:
+        df.columns = [str(c).strip() for c in df.columns]
+        return df
+    return None
