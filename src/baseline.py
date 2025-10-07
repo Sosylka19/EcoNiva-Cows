@@ -1,4 +1,5 @@
 import pandas as pd
+import os
 import numpy as np
 from catboost import CatBoostRegressor
 from sklearn.model_selection import train_test_split, KFold
@@ -244,7 +245,8 @@ class CatBoostFattyAcidsPredictor:
             axes[idx].set_xlabel('Важность')
         
         plt.tight_layout()
-        plt.savefig('./data/feature_importance.png')
+        os.makedirs('./data', exist_ok=True)
+        plt.savefig('./data/feature_importance.png', )
         plt.show()
     
     def plot_cv_results(self):
@@ -266,6 +268,7 @@ class CatBoostFattyAcidsPredictor:
             axes[idx].grid(True, alpha=0.3)
         
         plt.tight_layout()
+        os.makedirs('./data', exist_ok=True)
         plt.savefig('./data/cv_results.png')
         plt.show()
     
@@ -345,7 +348,7 @@ def main():
     predictor = CatBoostFattyAcidsPredictor(random_state=42)
     
     try:
-        X, y = predictor.load_and_preprocess_data('kis.xlsx')
+        X, y = predictor.load_and_preprocess_data('./src/kis.xlsx')
         
         predictor.train_with_cross_validation(n_splits=5)
 
