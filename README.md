@@ -24,7 +24,7 @@ git clone https://github.com/Sosylka19/EcoNiva-Cows.git && cd EcoNiva-Cows
 ```
 ```
 2. macos/linux: source venv/bin/activate
-windows: venv\bin\activate
+windows: .\venv\Scripts\activate
 ```
 ```
 3. pip install -r requirements.txt

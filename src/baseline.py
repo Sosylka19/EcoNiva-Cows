@@ -38,11 +38,10 @@ class CatBoostFattyAcidsPredictor:
         
         X_full = X_full.fillna(0)
         
-        # Применяем feature engineering для улучшения качества
+
         if feature_engineering:
             X_full = self._apply_feature_engineering(X_full)
         
-        # Разделяем данные на train/test ДО обучения
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             X_full, y_full, test_size=test_size, random_state=self.random_state
         )
@@ -59,26 +58,22 @@ class CatBoostFattyAcidsPredictor:
         """
         X_eng = X.copy()
         
-        # Добавляем полиномиальные признаки для важных признаков
+
         important_features = []
         for col in X.columns:
-            if X[col].std() > 0 and X[col].nunique() > 5:  # Выбираем непрерывные признаки
+            if X[col].std() > 0 and X[col].nunique() > 5: 
                 important_features.append(col)
         
-        # Ограничиваем количество важных признаков для избежания переобучения
         important_features = important_features[:20]
         
-        # Добавляем квадраты важных признаков
         for feature in important_features:
             X_eng[f'{feature}_squared'] = X[feature] ** 2
         
-        # Добавляем взаимодействия между топ-признаками
         top_features = important_features[:10]
         for i, feat1 in enumerate(top_features):
             for feat2 in top_features[i+1:]:
                 X_eng[f'{feat1}_x_{feat2}'] = X[feat1] * X[feat2]
         
-        # Добавляем статистические признаки
         numeric_cols = X.select_dtypes(include=[np.number]).columns
         if len(numeric_cols) > 0:
             X_eng['mean_features'] = X[numeric_cols].mean(axis=1)
@@ -91,7 +86,6 @@ class CatBoostFattyAcidsPredictor:
         base_params = {
             'random_seed': [self.random_state],
             'verbose': [False],
-            # убери отсюда early_stopping_rounds вообще — его не нужно подбирать
             'loss_function': ['RMSE'],
             'od_type': ['Iter'],
         }
@@ -99,12 +93,12 @@ class CatBoostFattyAcidsPredictor:
         if target_name in ['лауриновая', 'стеариновая', 'олеиновая']:
             param_grid = {
                 **base_params,
-                'iterations': [800, 1200],            # ↓ было 4 → стало 2
-                'learning_rate': [0.03, 0.05],        # ↓
-                'depth': [5, 7],                      # ↓
-                'l2_leaf_reg': [1, 3, 5],             # ↓
-                'bagging_temperature': [0.5, 1],      # ↓
-                'random_strength': [0.5, 1]           # ↓
+                'iterations': [800, 1200],           
+                'learning_rate': [0.03, 0.05],       
+                'depth': [5, 7],                    
+                'l2_leaf_reg': [1, 3, 5],             
+                'bagging_temperature': [0.5, 1],      
+                'random_strength': [0.5, 1]           
             }
         elif target_name in ['пальмитиновая']:
             param_grid = {
@@ -137,7 +131,6 @@ class CatBoostFattyAcidsPredictor:
         
         param_grid = self.get_hyperparams_grid(target)
         
-        # Увеличиваем размер выборки для лучшего качества поиска
         sample_size = min(2000, len(self.X_train))
         if len(self.X_train) > sample_size:
             sample_idx = np.random.choice(len(self.X_train), sample_size, replace=False)
@@ -147,13 +140,10 @@ class CatBoostFattyAcidsPredictor:
             X_sample = self.X_train
             y_sample = self.y_train[target]
         
-        # Создаем модель CatBoost
         catboost_model = CatBoostRegressor()
         
-        # Настройки для GridSearchCV
         cv_folds = KFold(n_splits=n_splits, shuffle=True, random_state=self.random_state)
         
-        # GridSearchCV
         grid_search = GridSearchCV(
             estimator=catboost_model,
             param_grid=param_grid,
@@ -175,7 +165,6 @@ class CatBoostFattyAcidsPredictor:
         print(f"  Поиск завершен за {search_time:.2f} сек")
         print(f"  Лучший RMSE: {np.sqrt(-grid_search.best_score_):.4f}")
         
-        # Сохраняем лучшие параметры
         self.best_params[target] = grid_search.best_params_
         
         return grid_search.best_params_
@@ -196,11 +185,9 @@ class CatBoostFattyAcidsPredictor:
             'train_time': [], 'models': []
         }
         
-        # Используем найденные лучшие параметры или стандартные, если поиск не проводился
         if target in self.best_params:
             params = self.best_params[target]
         else:
-            # Fallback на стандартные параметры с улучшенными настройками
             params = {
                 'random_seed': self.random_state,
                 'verbose': False,
@@ -260,7 +247,6 @@ class CatBoostFattyAcidsPredictor:
         
         print("\nПоиск гиперпараметров завершен!")
         
-        # Выводим найденные параметры
         for target, params in self.best_params.items():
             print(f"\n{target}:")
             for param, value in params.items():
@@ -286,7 +272,6 @@ class CatBoostFattyAcidsPredictor:
             best_model_idx = np.argmax(cv_results['r2'])
             best_model = cv_results['models'][best_model_idx]
             
-            # Переобучаем лучшую модель на всей обучающей выборке
             if target in self.best_params:
                 final_params = self.best_params[target]
             else:
