@@ -2,7 +2,7 @@ import pandas as pd
 import os
 import numpy as np
 from catboost import CatBoostRegressor
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import train_test_split, KFold, GridSearchCV
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
@@ -22,69 +22,172 @@ class CatBoostFattyAcidsPredictor:
         self.is_fitted = False
         self.target_columns = ['лауриновая', 'стеариновая', 'пальмитиновая', 
                               'олеиновая', 'линолевая', 'линоленовая']
+        self.best_params = {}
         
-    def load_and_preprocess_data(self, file_path):
+    def load_and_preprocess_data(self, file_path, test_size=0.2, feature_engineering=True):
         """
-        Загрузка и предобработка данных
+        Загрузка и предобработка данных с разделением на train/test
         """
         self.df = pd.read_excel(file_path)
     
-        self.X = self.df.drop(columns=['Рецепты', 'Unnamed: 0', 
+        X_full = self.df.drop(columns=['Рецепты', 'Unnamed: 0', 
                                       'лауриновая', 'стеариновая', 'пальмитиновая', 
                                       'олеиновая', 'линолевая', 'линоленовая'])
         
-        self.y = self.df[self.target_columns]
+        y_full = self.df[self.target_columns]
         
-        self.X = self.X.fillna(0)
+        X_full = X_full.fillna(0)
         
-        print("Данные загружены")
+        # Применяем feature engineering для улучшения качества
+        if feature_engineering:
+            X_full = self._apply_feature_engineering(X_full)
         
-        return self.X, self.y
+        # Разделяем данные на train/test ДО обучения
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
+            X_full, y_full, test_size=test_size, random_state=self.random_state
+        )
+        
+        print(f"Данные загружены и разделены: {len(self.X_train)} train, {len(self.X_test)} test")
+        if feature_engineering:
+            print(f"Применено feature engineering: {X_full.shape[1]} признаков")
+        
+        return self.X_train, self.y_train, self.X_test, self.y_test
     
-    def get_best_hyperparams(self, target_name):
+    def _apply_feature_engineering(self, X):
         """
-        Подбор гиперпараметров для разных целевых переменных
+        Применение feature engineering для улучшения качества модели
         """
+        X_eng = X.copy()
+        
+        # Добавляем полиномиальные признаки для важных признаков
+        important_features = []
+        for col in X.columns:
+            if X[col].std() > 0 and X[col].nunique() > 5:  # Выбираем непрерывные признаки
+                important_features.append(col)
+        
+        # Ограничиваем количество важных признаков для избежания переобучения
+        important_features = important_features[:20]
+        
+        # Добавляем квадраты важных признаков
+        for feature in important_features:
+            X_eng[f'{feature}_squared'] = X[feature] ** 2
+        
+        # Добавляем взаимодействия между топ-признаками
+        top_features = important_features[:10]
+        for i, feat1 in enumerate(top_features):
+            for feat2 in top_features[i+1:]:
+                X_eng[f'{feat1}_x_{feat2}'] = X[feat1] * X[feat2]
+        
+        # Добавляем статистические признаки
+        numeric_cols = X.select_dtypes(include=[np.number]).columns
+        if len(numeric_cols) > 0:
+            X_eng['mean_features'] = X[numeric_cols].mean(axis=1)
+            X_eng['std_features'] = X[numeric_cols].std(axis=1)
+            X_eng['sum_features'] = X[numeric_cols].sum(axis=1)
+        
+        return X_eng
+    
+    def get_hyperparams_grid(self, target_name):
         base_params = {
-            'random_seed': self.random_state,
-            'verbose': False,
-            'early_stopping_rounds': 50,
-            'loss_function': 'RMSE'
+            'random_seed': [self.random_state],
+            'verbose': [False],
+            # убери отсюда early_stopping_rounds вообще — его не нужно подбирать
+            'loss_function': ['RMSE'],
+            'od_type': ['Iter'],
         }
 
         if target_name in ['лауриновая', 'стеариновая', 'олеиновая']:
-            return {
+            param_grid = {
                 **base_params,
-                'iterations': 800,
-                'learning_rate': 0.05,
-                'depth': 6,
-                'l2_leaf_reg': 3
+                'iterations': [800, 1200],            # ↓ было 4 → стало 2
+                'learning_rate': [0.03, 0.05],        # ↓
+                'depth': [5, 7],                      # ↓
+                'l2_leaf_reg': [1, 3, 5],             # ↓
+                'bagging_temperature': [0.5, 1],      # ↓
+                'random_strength': [0.5, 1]           # ↓
             }
         elif target_name in ['пальмитиновая']:
-            return {
+            param_grid = {
                 **base_params,
-                'iterations': 1000,
-                'learning_rate': 0.08,
-                'depth': 8,
-                'l2_leaf_reg': 5
+                'iterations': [1200, 1600],
+                'learning_rate': [0.06, 0.1],
+                'depth': [6, 9],
+                'l2_leaf_reg': [3, 7],
+                'bagging_temperature': [0.5],
+                'random_strength': [1],
             }
         else:
-            return {
+            param_grid = {
                 **base_params,
-                'iterations': 800,
-                'learning_rate': 0.08,
-                'depth': 6,
-                'l2_leaf_reg': 3
+                'iterations': [1000, 1400],
+                'learning_rate': [0.05, 0.08],
+                'depth': [6, 8],
+                'l2_leaf_reg': [2, 5],
+                'bagging_temperature': [0.5],
+                'random_strength': [1],
             }
+
+        return param_grid
+    
+    def search_best_hyperparams(self, target, n_splits=3):
+        """
+        Поиск лучших гиперпараметров с помощью GridSearchCV
+        """
+        print(f"\n Поиск лучших гиперпараметров для: {target}")
+        
+        param_grid = self.get_hyperparams_grid(target)
+        
+        # Увеличиваем размер выборки для лучшего качества поиска
+        sample_size = min(2000, len(self.X_train))
+        if len(self.X_train) > sample_size:
+            sample_idx = np.random.choice(len(self.X_train), sample_size, replace=False)
+            X_sample = self.X_train.iloc[sample_idx]
+            y_sample = self.y_train[target].iloc[sample_idx]
+        else:
+            X_sample = self.X_train
+            y_sample = self.y_train[target]
+        
+        # Создаем модель CatBoost
+        catboost_model = CatBoostRegressor()
+        
+        # Настройки для GridSearchCV
+        cv_folds = KFold(n_splits=n_splits, shuffle=True, random_state=self.random_state)
+        
+        # GridSearchCV
+        grid_search = GridSearchCV(
+            estimator=catboost_model,
+            param_grid=param_grid,
+            cv=cv_folds,
+            scoring='neg_mean_squared_error',
+            n_jobs=-1,
+            verbose=0
+        )
+        
+        total_combinations = (len(param_grid['iterations']) * len(param_grid['learning_rate']) * 
+                            len(param_grid['depth']) * len(param_grid['l2_leaf_reg']) * 
+                            len(param_grid['bagging_temperature']) * len(param_grid['random_strength']))
+        print(f"  Поиск по {total_combinations} комбинациям...")
+        start_time = time.time()
+        
+        grid_search.fit(X_sample, y_sample)
+        
+        search_time = time.time() - start_time
+        print(f"  Поиск завершен за {search_time:.2f} сек")
+        print(f"  Лучший RMSE: {np.sqrt(-grid_search.best_score_):.4f}")
+        
+        # Сохраняем лучшие параметры
+        self.best_params[target] = grid_search.best_params_
+        
+        return grid_search.best_params_
     
     def cross_validate_target(self, target, n_splits=5):
         """
-        Кросс-валидация для одной целевой переменной
+        Кросс-валидация для одной целевой переменной (только на обучающей выборке)
         """
         print(f"\n Кросс-валидация для: {target}")
         
-        X_array = self.X.values
-        y_array = self.y[target].values
+        X_array = self.X_train.values
+        y_array = self.y_train[target].values
         
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=self.random_state)
         
@@ -93,7 +196,24 @@ class CatBoostFattyAcidsPredictor:
             'train_time': [], 'models': []
         }
         
-        params = self.get_best_hyperparams(target)
+        # Используем найденные лучшие параметры или стандартные, если поиск не проводился
+        if target in self.best_params:
+            params = self.best_params[target]
+        else:
+            # Fallback на стандартные параметры с улучшенными настройками
+            params = {
+                'random_seed': self.random_state,
+                'verbose': False,
+                'early_stopping_rounds': 50,
+                'loss_function': 'RMSE',
+                'od_type': 'Iter',
+                'iterations': 1000,
+                'learning_rate': 0.05,
+                'depth': 6,
+                'l2_leaf_reg': 3,
+                'bagging_temperature': 1,
+                'random_strength': 1
+            }
         
         for fold, (train_idx, val_idx) in enumerate(kf.split(X_array)):
             print(f"  Fold {fold+1}/{n_splits}...", end=" ")
@@ -129,10 +249,35 @@ class CatBoostFattyAcidsPredictor:
         
         return fold_scores
     
-    def train_with_cross_validation(self, n_splits=5):
+    def search_all_hyperparams(self, n_splits=3):
         """
-        Основной метод обучения с кросс-валидацией
+        Поиск лучших гиперпараметров для всех целевых переменных
         """
+        print("Начало поиска лучших гиперпараметров для всех целевых переменных")
+        
+        for target in self.target_columns:
+            self.search_best_hyperparams(target, n_splits)
+        
+        print("\nПоиск гиперпараметров завершен!")
+        
+        # Выводим найденные параметры
+        for target, params in self.best_params.items():
+            print(f"\n{target}:")
+            for param, value in params.items():
+                print(f"  {param}: {value}")
+    
+    def train_with_cross_validation(self, n_splits=5, search_hyperparams=False, hyperparams_splits=3):
+        """
+        Основной метод обучения с кросс-валидацией (только на обучающей выборке)
+        
+        Args:
+            n_splits: количество фолдов для кросс-валидации
+            search_hyperparams: выполнять ли поиск гиперпараметров
+            hyperparams_splits: количество фолдов для поиска гиперпараметров
+        """
+        if search_hyperparams:
+            self.search_all_hyperparams(hyperparams_splits)
+        
         print("Начало обучения с кросс-валидацией")
         
         for target in self.target_columns:
@@ -141,7 +286,28 @@ class CatBoostFattyAcidsPredictor:
             best_model_idx = np.argmax(cv_results['r2'])
             best_model = cv_results['models'][best_model_idx]
             
-            self.models[target] = best_model
+            # Переобучаем лучшую модель на всей обучающей выборке
+            if target in self.best_params:
+                final_params = self.best_params[target]
+            else:
+                final_params = {
+                    'random_seed': self.random_state,
+                    'verbose': False,
+                    'early_stopping_rounds': 50,
+                    'loss_function': 'RMSE',
+                    'od_type': 'Iter',
+                    'iterations': 1000,
+                    'learning_rate': 0.05,
+                    'depth': 6,
+                    'l2_leaf_reg': 3,
+                    'bagging_temperature': 1,
+                    'random_strength': 1
+                }
+            
+            final_model = CatBoostRegressor(**final_params)
+            final_model.fit(self.X_train, self.y_train[target], verbose=False)
+            
+            self.models[target] = final_model
             self.cv_results[target] = {
                 'mean_r2': np.mean(cv_results['r2']),
                 'std_r2': np.std(cv_results['r2']),
@@ -153,7 +319,7 @@ class CatBoostFattyAcidsPredictor:
                 'fold_scores': cv_results
             }
             
-            self.feature_importance[target] = self._get_feature_importance(best_model)
+            self.feature_importance[target] = self._get_feature_importance(final_model)
         
         self.is_fitted = True
         print("\n обучение завершено")
@@ -161,34 +327,30 @@ class CatBoostFattyAcidsPredictor:
     def _get_feature_importance(self, model):
         """Получение важности признаков"""
         importance = model.get_feature_importance()
-        feature_names = self.X.columns
+        feature_names = self.X_train.columns
         return pd.DataFrame({
             'feature': feature_names,
             'importance': importance
         }).sort_values('importance', ascending=False)
     
-    def evaluate_on_test_set(self, test_size=0.2):
+    def evaluate_on_test_set(self):
         """
-        Оценка на тестовой выборке
+        Оценка на тестовой выборке (которая была отделена при загрузке данных)
         """
         if not self.is_fitted:
             raise ValueError("Модели не обучены! Сначала вызовите train_with_cross_validation()")
         
         print("\nоценка на тесте")
         
-        X_train, X_test, y_train, y_test = train_test_split(
-            self.X, self.y, test_size=test_size, random_state=self.random_state
-        )
-        
         test_results = {}
         
         for target in self.target_columns:
             model = self.models[target]
-            y_pred = model.predict(X_test)
+            y_pred = model.predict(self.X_test)
             
-            r2 = r2_score(y_test[target], y_pred)
-            rmse = np.sqrt(mean_squared_error(y_test[target], y_pred))
-            mae = mean_absolute_error(y_test[target], y_pred)
+            r2 = r2_score(self.y_test[target], y_pred)
+            rmse = np.sqrt(mean_squared_error(self.y_test[target], y_pred))
+            mae = mean_absolute_error(self.y_test[target], y_pred)
             
             test_results[target] = {
                 'r2': r2,
@@ -287,8 +449,8 @@ class CatBoostFattyAcidsPredictor:
         except Exception:
             feature_names = None
 
-        if feature_names is None and hasattr(self, 'X') and isinstance(getattr(self, 'X'), pd.DataFrame):
-            feature_names = list(self.X.columns)
+        if feature_names is None and hasattr(self, 'X_train') and isinstance(getattr(self, 'X_train'), pd.DataFrame):
+            feature_names = list(self.X_train.columns)
 
         if feature_names is None:
             raise ValueError("Не удалось определить набор признаков модели для выравнивания входных данных")
@@ -317,7 +479,8 @@ class CatBoostFattyAcidsPredictor:
         joblib.dump({
             'cv_results': self.cv_results,
             'feature_importance': self.feature_importance,
-            'target_columns': self.target_columns
+            'target_columns': self.target_columns,
+            'best_params': self.best_params
         }, results_filename)
         
         print(f" результаты сохранены как: {results_filename}")
@@ -336,6 +499,7 @@ class CatBoostFattyAcidsPredictor:
         results_data = joblib.load(results_filename)
         self.cv_results = results_data['cv_results']
         self.feature_importance = results_data['feature_importance']
+        self.best_params = results_data.get('best_params', {})
         
         self.is_fitted = True
 
@@ -348,23 +512,23 @@ def main():
     predictor = CatBoostFattyAcidsPredictor(random_state=42)
     
     try:
-        X, y = predictor.load_and_preprocess_data('./src/kis.xlsx')
+        X_train, y_train, X_test, y_test = predictor.load_and_preprocess_data('./src/kis.xlsx', feature_engineering=True)
         
-        predictor.train_with_cross_validation(n_splits=5)
+        predictor.train_with_cross_validation(n_splits=5, search_hyperparams=True, hyperparams_splits=3)
 
         predictor.print_cv_summary()
         
-        test_results = predictor.evaluate_on_test_set(test_size=0.2)
+        test_results = predictor.evaluate_on_test_set()
         
         predictor.plot_cv_results()
         predictor.plot_feature_importance(top_n=15)
         
         predictor.save_models('fatty_acids_model')
         
-        print("\n Пример предсказания на первых 5 samples:")
-        sample_data = X.head(5)
+        print("\n Пример предсказания на первых 5 samples из тестовой выборки:")
+        sample_data = X_test.head(5)
         predictions = predictor.predict_new_data(sample_data)
-        actual_values = y.head(5)
+        actual_values = y_test.head(5)
         
         comparison = pd.concat([actual_values, predictions.add_prefix('pred_')], axis=1)
         print(comparison.round(4))
