@@ -30,7 +30,7 @@ class CatBoostFattyAcidsPredictor:
         """
         self.df = pd.read_excel(file_path)
     
-        X_full = self.df.drop(columns=['Рецепты', 'Unnamed: 0', 
+        X_full = self.df.drop(columns=['Рецепты', 
                                       'лауриновая', 'стеариновая', 'пальмитиновая', 
                                       'олеиновая', 'линолевая', 'линоленовая'])
         
