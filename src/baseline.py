@@ -456,11 +456,11 @@ class CatBoostFattyAcidsPredictor:
             raise ValueError("Модели не обучены!")
         
         for target in self.target_columns:
-            filename = f"data/{filepath_prefix}_{target}.cbm"
+            filename = f"src/{filepath_prefix}_{target}.cbm"
             self.models[target].save_model(filename)
             print(f" модель для {target} сохранена как: {filename}")
         
-        results_filename = f"data/{filepath_prefix}_results.joblib"
+        results_filename = f"src/{filepath_prefix}_results.joblib"
         joblib.dump({
             'cv_results': self.cv_results,
             'feature_importance': self.feature_importance,

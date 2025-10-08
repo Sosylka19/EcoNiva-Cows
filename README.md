@@ -29,12 +29,15 @@ windows: .\venv\Scripts\activate
 ```
 3. pip install -r requirements.txt
 ```
+
+### Важно 
+Если хотите сами обучить(обучение идет 10 минут с полностью груженым CPU), то запускайте след функцию, если нет(лучше не обучать самим), то переходите к след шагу
 ```
-4. python -m src.baseline
+ python -m src.baseline
 ```
 
 ```
-5. python -m gui.interface
+4. python -m gui.interface
 ```
 
 и всё работает
