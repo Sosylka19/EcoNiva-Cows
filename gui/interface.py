@@ -120,4 +120,5 @@ with gr.Blocks(title=APP_TITLE) as demo:
     analyze_btn.click(fn=on_analyze_and_features, inputs=[data_frame, n_state], outputs=[fa_table, features_box])
 
 if __name__ == "__main__":
+    os.makedirs('./data', exist_ok=True)
     demo.launch()
