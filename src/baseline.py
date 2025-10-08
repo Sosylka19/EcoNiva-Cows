@@ -476,11 +476,11 @@ class CatBoostFattyAcidsPredictor:
         """
         self.models = {}
         for target in self.target_columns:
-            filename = f"data/{filepath_prefix}_{target}.cbm"
+            filename = f"src/{filepath_prefix}_{target}.cbm"
             self.models[target] = CatBoostRegressor()
             self.models[target].load_model(filename)
         
-        results_filename = f"data/{filepath_prefix}_results.joblib"
+        results_filename = f"src/{filepath_prefix}_results.joblib"
         results_data = joblib.load(results_filename)
         self.cv_results = results_data['cv_results']
         self.feature_importance = results_data['feature_importance']

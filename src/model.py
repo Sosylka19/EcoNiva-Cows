@@ -72,7 +72,7 @@ def get_main_features(top_n: int = 3) -> Dict[str, List[Tuple[str, float]]]:
                 pass
 
         try:
-                jb = joblib.load('data/fatty_acids_model_results.joblib')
+                jb = joblib.load('src/fatty_acids_model_results.joblib')
                 fi = jb.get('feature_importance')
                 result: Dict[str, List[Tuple[str, float]]] = {}
                 if isinstance(fi, dict):
